@@ -2,6 +2,50 @@
 const LLM_API_KEY = 'AIzaSyAd95HuZprHOg60u0p7EE-v0iMtMaFERAQ';
 const LLM_API_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
+// Sample bookmarks for testing with special characters and edge cases
+const testBookmarks = [
+  {
+    id: "1",
+    title: "GitHub - Your Profile",
+    url: "https://github.com/username"
+  },
+  {
+    id: "2",
+    title: "Stack Overflow: JavaScript [object Object] error",
+    url: "https://stackoverflow.com/questions/123"
+  },
+  {
+    id: "3",
+    title: "Amazon.com: User's Shopping Cart & Wishlist",
+    url: "https://amazon.com/cart"
+  },
+  {
+    id: "4",
+    title: "React.js - {useState} Hook Documentation",
+    url: "https://reactjs.org/docs/hooks"
+  },
+  {
+    id: "5",
+    title: "YouTube - \"How to Code\" Tutorial",
+    url: "https://youtube.com/watch?v=123"
+  },
+  {
+    id: "6",
+    title: "Gmail - Important & Starred",
+    url: "https://mail.google.com/starred"
+  },
+  {
+    id: "7",
+    title: "MDN Web Docs: Array.prototype.map()",
+    url: "https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Array/map"
+  },
+  {
+    id: "8",
+    title: "Netflix: Continue Watching...",
+    url: "https://netflix.com/watch"
+  }
+];
+
 // Function to get all bookmarks
 async function getAllBookmarks() {
   return new Promise((resolve) => {
@@ -29,12 +73,14 @@ async function getAllBookmarks() {
 
 // Function to clean and parse JSON response
 function cleanAndParseJSON(text) {
+  console.log('\n=== Original Response ===');
+  console.log(text);
+  
   try {
-    console.log('\nCleaning steps:');
-    
     // Remove any markdown formatting
     let cleanText = text.replace(/```json\s*|\s*```/g, '').trim();
-    console.log('1. After removing markdown:', cleanText.substring(0, 100) + '...');
+    console.log('\n=== After removing markdown ===');
+    console.log(cleanText);
     
     // Find the first { and last } to extract just the JSON object
     const startIndex = cleanText.indexOf('{');
@@ -43,15 +89,19 @@ function cleanAndParseJSON(text) {
       throw new Error('No valid JSON object found in response');
     }
     cleanText = cleanText.slice(startIndex, endIndex);
-    console.log('2. After extracting JSON object:', cleanText.substring(0, 100) + '...');
+    console.log('\n=== After extracting JSON object ===');
+    console.log(cleanText);
     
-    // Replace any single quotes with double quotes
-    cleanText = cleanText.replace(/'/g, '"');
-    console.log('3. After replacing single quotes:', cleanText.substring(0, 100) + '...');
+    // Handle apostrophes in text by escaping them
+    cleanText = cleanText.replace(/([^\\])'([^']*)'/g, '$1\\"$2\\"');
+    cleanText = cleanText.replace(/^'([^']*)'/g, '"\\"$1\\""');
+    console.log('\n=== After handling apostrophes ===');
+    console.log(cleanText);
     
     // Ensure all property names are double-quoted
     cleanText = cleanText.replace(/([{,]\s*)([a-zA-Z0-9_]+)(\s*:)/g, '$1"$2"$3');
-    console.log('4. After ensuring double quotes:', cleanText.substring(0, 100) + '...');
+    console.log('\n=== After ensuring double-quoted properties ===');
+    console.log(cleanText);
     
     // Remove any extra spaces and normalize newlines
     cleanText = cleanText
@@ -59,15 +109,18 @@ function cleanAndParseJSON(text) {
       .replace(/\s+/g, ' ')    // Replace multiple spaces with a single space
       .replace(/\s*([{}[\],:])\s*/g, '$1'); // Remove spaces around JSON syntax characters
     
-    console.log('5. After normalizing whitespace:', cleanText.substring(0, 100) + '...');
+    console.log('\n=== Final cleaned text ===');
+    console.log(cleanText);
     
     // Try to parse the JSON
     try {
-      return JSON.parse(cleanText);
+      const parsed = JSON.parse(cleanText);
+      console.log('\n=== Successfully parsed JSON ===');
+      return parsed;
     } catch (parseError) {
       // If parsing fails, try to find the exact position of the error
       const errorPosition = parseInt(parseError.message.match(/\d+/)[0]);
-      console.error('\nJSON Parse Error Details:');
+      console.error('\n=== JSON Parse Error Details ===');
       console.error('Error position:', errorPosition);
       console.error('Text before error:', cleanText.substring(Math.max(0, errorPosition - 50), errorPosition));
       console.error('Text after error:', cleanText.substring(errorPosition, Math.min(cleanText.length, errorPosition + 50)));
@@ -75,7 +128,8 @@ function cleanAndParseJSON(text) {
       throw parseError;
     }
   } catch (error) {
-    console.error('\nError cleaning JSON:', error);
+    console.error('\n=== Error cleaning JSON ===');
+    console.error('Error:', error);
     console.error('Original text:', text);
     throw new Error('Failed to parse JSON response: ' + error.message);
   }
@@ -83,10 +137,12 @@ function cleanAndParseJSON(text) {
 
 // Function to analyze bookmarks using Gemini
 async function analyzeBookmarks(bookmarks) {
-  const prompt = `You are a bookmark categorization assistant. Analyze these bookmarks and suggest categories for them.
+  const prompt = `You are a JSON-only response bot. You must respond with valid JSON only, no markdown, no backticks, no additional text. All property names must be double-quoted.
+
+    Analyze these bookmarks and suggest categories for them.
     For each bookmark, provide a category and a brief explanation.
-    IMPORTANT: Respond with ONLY a valid JSON object, no markdown formatting, no backticks, no additional text.
-    The JSON must follow this exact structure and use double quotes for all property names:
+    IMPORTANT: You must respond with a valid JSON object only. No markdown, no backticks, no additional text.
+    The response must be a single JSON object with this exact structure:
     {
       "categories": [
         {
@@ -119,7 +175,7 @@ async function analyzeBookmarks(bookmarks) {
           }]
         }],
         generationConfig: {
-          temperature: 0.7,
+          temperature: 0.3,
           topK: 40,
           topP: 0.95,
           maxOutputTokens: 2048,
@@ -128,38 +184,29 @@ async function analyzeBookmarks(bookmarks) {
     });
 
     const data = await response.json();
-    console.log('\nRaw response from Gemini:');
-    console.log(JSON.stringify(data, null, 2));
-
     if (data.error) {
       throw new Error(data.error.message);
     }
     
     const responseText = data.candidates[0].content.parts[0].text;
-    console.log('\nResponse text before cleaning:');
+    console.log('\n=== Raw response from Gemini ===');
     console.log(responseText);
-
-    const cleanedJson = cleanAndParseJSON(responseText);
-    console.log('\nCleaned and parsed JSON:');
-    console.log(JSON.stringify(cleanedJson, null, 2));
-
-    return cleanedJson;
+    
+    return cleanAndParseJSON(responseText);
   } catch (error) {
     console.error('Error analyzing bookmarks:', error);
     throw error;
   }
 }
 
-// Run the test with real bookmarks
-console.log('Starting test with real bookmarks...');
-getAllBookmarks()
-  .then(bookmarks => {
-    console.log(`Found ${bookmarks.length} bookmarks to analyze`);
-    return analyzeBookmarks(bookmarks);
-  })
+// Run the test
+console.log('Starting test with sample bookmarks...');
+analyzeBookmarks(testBookmarks)
   .then(result => {
-    console.log('\nTest completed successfully!');
+    console.log('\n=== Final Result ===');
+    console.log(JSON.stringify(result, null, 2));
   })
   .catch(error => {
-    console.error('\nTest failed:', error);
+    console.error('\n=== Test Failed ===');
+    console.error(error);
   }); 

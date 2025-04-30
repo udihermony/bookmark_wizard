@@ -41,8 +41,9 @@ function cleanAndParseJSON(text) {
     }
     cleanText = cleanText.slice(startIndex, endIndex);
     
-    // Replace any single quotes with double quotes
-    cleanText = cleanText.replace(/'/g, '"');
+    // Handle apostrophes in text by escaping them
+    cleanText = cleanText.replace(/([^\\])'([^']*)'/g, '$1\\"$2\\"');
+    cleanText = cleanText.replace(/^'([^']*)'/g, '"\\"$1\\""');
     
     // Ensure all property names are double-quoted
     cleanText = cleanText.replace(/([{,]\s*)([a-zA-Z0-9_]+)(\s*:)/g, '$1"$2"$3');
@@ -113,7 +114,7 @@ async function analyzeBookmarks(bookmarks) {
           }]
         }],
         generationConfig: {
-          temperature: 0.3, // Lower temperature for more consistent output
+          temperature: 0.2, // Lower temperature for more consistent output
           topK: 40,
           topP: 0.95,
           maxOutputTokens: 2048,
@@ -189,4 +190,4 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     });
     return true; // Required for async response
   }
-}); 
+});
