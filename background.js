@@ -1,52 +1,37 @@
 // Configuration for the LLM API
-const LLM_API_KEY = 'AIzaSyAd95HuZprHOg60u0p7EE-v0iMtMaFERAQ'; // You'll need to add your Gemini API key here
-const LLM_API_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+const OLLAMA_API_ENDPOINT = 'http://localhost:11434/api/generate';
 
-// Function to show debug popup
-function showDebugPopup(title, content) {
-  const popupWidth = 800;
-  const popupHeight = 600;
-  const left = (screen.width - popupWidth) / 2;
-  const top = (screen.height - popupHeight) / 2;
+// Function to send debug info to popup
+async function sendDebugInfo(title, content) {
+  const tabs = await chrome.tabs.query({active: true, currentWindow: true});
+  if (tabs.length > 0) {
+    chrome.runtime.sendMessage({
+      action: 'showDebug',
+      title: title,
+      content: content
+    });
+  }
+}
 
-  const debugWindow = window.open(
-    '',
-    'debugWindow',
-    `width=${popupWidth},height=${popupHeight},left=${left},top=${top}`
-  );
-
-  debugWindow.document.write(`
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <title>Debug: ${title}</title>
-        <style>
-          body {
-            font-family: monospace;
-            padding: 20px;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-          }
-          .section {
-            margin-bottom: 20px;
-            padding: 10px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-          }
-          .section-title {
-            font-weight: bold;
-            margin-bottom: 10px;
-          }
-        </style>
-      </head>
-      <body>
-        <h2>${title}</h2>
-        <div class="section">
-          ${content}
-        </div>
-      </body>
-    </html>
-  `);
+// Function to make API request with timeout
+async function fetchWithTimeout(url, options, timeout = 30000) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
+  
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+    clearTimeout(id);
+    return response;
+  } catch (error) {
+    clearTimeout(id);
+    if (error.name === 'AbortError') {
+      throw new Error('Request timed out after ' + timeout + 'ms');
+    }
+    throw error;
+  }
 }
 
 // Function to get all bookmarks
@@ -72,6 +57,15 @@ async function getAllBookmarks() {
       resolve(bookmarks);
     });
   });
+}
+
+// Function to process bookmarks in batches
+async function processBookmarksInBatches(bookmarks, batchSize = 10) {
+  const batches = [];
+  for (let i = 0; i < bookmarks.length; i += batchSize) {
+    batches.push(bookmarks.slice(i, i + batchSize));
+  }
+  return batches;
 }
 
 // Function to clean and parse JSON response
@@ -113,6 +107,16 @@ function cleanAndParseJSON(text) {
       .replace(/\s+/g, ' ')    // Replace multiple spaces with a single space
       .replace(/\s*([{}[\],:])\s*/g, '$1'); // Remove spaces around JSON syntax characters
     
+    // Fix incomplete JSON by adding missing closing brackets/braces
+    const openBraces = (cleanText.match(/{/g) || []).length;
+    const closeBraces = (cleanText.match(/}/g) || []).length;
+    const openBrackets = (cleanText.match(/\[/g) || []).length;
+    const closeBrackets = (cleanText.match(/\]/g) || []).length;
+    
+    // Add missing closing brackets/braces
+    cleanText += '}'.repeat(openBraces - closeBraces);
+    cleanText += ']'.repeat(openBrackets - closeBrackets);
+    
     debugOutput += '=== Final cleaned text ===\n';
     debugOutput += cleanText + '\n\n';
     
@@ -121,7 +125,7 @@ function cleanAndParseJSON(text) {
       const parsed = JSON.parse(cleanText);
       debugOutput += '=== Successfully parsed JSON ===\n';
       debugOutput += JSON.stringify(parsed, null, 2);
-      showDebugPopup('JSON Cleaning Process', debugOutput);
+      sendDebugInfo('JSON Cleaning Process', debugOutput);
       return parsed;
     } catch (parseError) {
       // If parsing fails, try to find the exact position of the error
@@ -131,24 +135,30 @@ function cleanAndParseJSON(text) {
       debugOutput += 'Text before error: ' + cleanText.substring(Math.max(0, errorPosition - 50), errorPosition) + '\n';
       debugOutput += 'Text after error: ' + cleanText.substring(errorPosition, Math.min(cleanText.length, errorPosition + 50)) + '\n';
       debugOutput += 'Full cleaned text: ' + cleanText + '\n';
-      showDebugPopup('JSON Parsing Error', debugOutput);
+      sendDebugInfo('JSON Parsing Error', debugOutput);
       throw parseError;
     }
   } catch (error) {
     debugOutput += '=== Error cleaning JSON ===\n';
     debugOutput += 'Error: ' + error + '\n';
     debugOutput += 'Original text: ' + text + '\n';
-    showDebugPopup('JSON Cleaning Error', debugOutput);
+    sendDebugInfo('JSON Cleaning Error', debugOutput);
     throw new Error('Failed to parse JSON response: ' + error.message);
   }
 }
 
-// Function to analyze bookmarks using Gemini
+// Function to analyze bookmarks using Ollama
 async function analyzeBookmarks(bookmarks) {
+  // Create a simplified version with just titles and IDs
+  const simplifiedBookmarks = bookmarks.map(b => ({
+    id: b.id,
+    title: b.title
+  }));
+
   const prompt = `You are a JSON-only response bot. You must respond with valid JSON only, no markdown, no backticks, no additional text. All property names must be double-quoted.
 
-    Analyze these bookmarks and suggest categories for them.
-    For each bookmark, provide a category and a brief explanation.
+    Analyze these bookmark titles and suggest categories for them.
+    For each bookmark, provide a category and a brief explanation based on its title.
     IMPORTANT: You must respond with a valid JSON object only. No markdown, no backticks, no additional text.
     The response must be a single JSON object with this exact structure:
     {
@@ -167,46 +177,52 @@ async function analyzeBookmarks(bookmarks) {
     }
     
     Bookmarks to analyze:
-    ${JSON.stringify(bookmarks, null, 2)}`;
+    ${JSON.stringify(simplifiedBookmarks, null, 2)}`;
 
   try {
-    console.log('Sending request to Gemini...');
+    console.log('Sending request to Ollama...');
     const requestBody = {
-      contents: [{
-        parts: [{
-          text: prompt
-        }]
-      }],
-      generationConfig: {
+      model: "qwen3:32b",
+      prompt: prompt,
+      stream: false,
+      options: {
         temperature: 0.3,
-        topK: 40,
-        topP: 0.95,
-        maxOutputTokens: 2048,
+        top_k: 40,
+        top_p: 0.95,
+        num_predict: 2048
       }
     };
 
-    showDebugPopup('API Request', JSON.stringify(requestBody, null, 2));
+    sendDebugInfo('API Request', JSON.stringify(requestBody, null, 2));
 
-    const response = await fetch(`${LLM_API_ENDPOINT}?key=${LLM_API_KEY}`, {
+    const response = await fetchWithTimeout(OLLAMA_API_ENDPOINT, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
       },
       body: JSON.stringify(requestBody)
-    });
+    }, 30000); // 30 second timeout
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      sendDebugInfo('API Error Response', `Status: ${response.status}, Body: ${errorText}`);
+      throw new Error(`API request failed with status ${response.status}: ${errorText}`);
+    }
 
     const data = await response.json();
     if (data.error) {
-      showDebugPopup('API Error', JSON.stringify(data.error, null, 2));
-      throw new Error(data.error.message);
+      sendDebugInfo('API Error', JSON.stringify(data.error, null, 2));
+      throw new Error(data.error);
     }
     
-    showDebugPopup('API Response', JSON.stringify(data, null, 2));
+    sendDebugInfo('API Response', JSON.stringify(data, null, 2));
     
-    const responseText = data.candidates[0].content.parts[0].text;
+    const responseText = data.response;
     return cleanAndParseJSON(responseText);
   } catch (error) {
     console.error('Error analyzing bookmarks:', error);
+    sendDebugInfo('Error Details', error.toString());
     throw error;
   }
 }
@@ -223,9 +239,14 @@ async function organizeBookmarks(analysis) {
 
       // Move bookmarks to their respective folders
       for (const bookmark of category.bookmarks) {
-        await chrome.bookmarks.move(bookmark.id, {
-          parentId: folder.id
-        });
+        try {
+          await chrome.bookmarks.move(bookmark.id, {
+            parentId: folder.id
+          });
+        } catch (moveError) {
+          console.error(`Error moving bookmark ${bookmark.id}:`, moveError);
+          // Continue with next bookmark even if one fails
+        }
       }
     }
     return true;
@@ -239,10 +260,25 @@ async function organizeBookmarks(analysis) {
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'analyzeBookmarks') {
     getAllBookmarks()
-      .then(bookmarks => analyzeBookmarks(bookmarks))
-      .then(analysis => {
-        chrome.storage.local.set({ bookmarkAnalysis: analysis }, () => {
-          sendResponse({ success: true });
+      .then(async (bookmarks) => {
+        const batches = await processBookmarksInBatches(bookmarks);
+        const allAnalysis = { categories: [] };
+        
+        for (let i = 0; i < batches.length; i++) {
+          const batchAnalysis = await analyzeBookmarks(batches[i]);
+          // Merge categories
+          for (const category of batchAnalysis.categories) {
+            const existingCategory = allAnalysis.categories.find(c => c.name === category.name);
+            if (existingCategory) {
+              existingCategory.bookmarks.push(...category.bookmarks);
+            } else {
+              allAnalysis.categories.push(category);
+            }
+          }
+        }
+        
+        chrome.storage.local.set({ bookmarkAnalysis: allAnalysis }, () => {
+          sendResponse({ success: true, totalBatches: batches.length });
         });
       })
       .catch(error => {

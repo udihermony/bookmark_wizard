@@ -23,11 +23,15 @@ document.addEventListener('DOMContentLoaded', function() {
       statusDiv.textContent = 'Analyzing bookmarks...';
       debugSection.style.display = 'none';
 
-      await chrome.runtime.sendMessage({ action: 'analyzeBookmarks' });
+      const response = await chrome.runtime.sendMessage({ action: 'analyzeBookmarks' });
       
-      statusDiv.className = 'success';
-      statusDiv.textContent = 'Analysis complete! You can now organize your bookmarks.';
-      organizeBtn.disabled = false;
+      if (response.success) {
+        statusDiv.className = 'success';
+        statusDiv.textContent = `Analysis complete! Processed ${response.totalBatches} batches. You can now organize your bookmarks.`;
+        organizeBtn.disabled = false;
+      } else {
+        throw new Error(response.error || 'Unknown error occurred');
+      }
     } catch (error) {
       statusDiv.className = 'error';
       statusDiv.textContent = 'Error: ' + error.message;
@@ -44,10 +48,14 @@ document.addEventListener('DOMContentLoaded', function() {
       statusDiv.textContent = 'Organizing bookmarks...';
       debugSection.style.display = 'none';
 
-      await chrome.runtime.sendMessage({ action: 'organizeBookmarks' });
+      const response = await chrome.runtime.sendMessage({ action: 'organizeBookmarks' });
       
-      statusDiv.className = 'success';
-      statusDiv.textContent = 'Bookmarks organized successfully!';
+      if (response.success) {
+        statusDiv.className = 'success';
+        statusDiv.textContent = 'Bookmarks organized successfully!';
+      } else {
+        throw new Error(response.error || 'Unknown error occurred');
+      }
     } catch (error) {
       statusDiv.className = 'error';
       statusDiv.textContent = 'Error: ' + error.message;
