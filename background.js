@@ -2,6 +2,53 @@
 const LLM_API_KEY = 'AIzaSyAd95HuZprHOg60u0p7EE-v0iMtMaFERAQ'; // You'll need to add your Gemini API key here
 const LLM_API_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
+// Function to show debug popup
+function showDebugPopup(title, content) {
+  const popupWidth = 800;
+  const popupHeight = 600;
+  const left = (screen.width - popupWidth) / 2;
+  const top = (screen.height - popupHeight) / 2;
+
+  const debugWindow = window.open(
+    '',
+    'debugWindow',
+    `width=${popupWidth},height=${popupHeight},left=${left},top=${top}`
+  );
+
+  debugWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>Debug: ${title}</title>
+        <style>
+          body {
+            font-family: monospace;
+            padding: 20px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+          }
+          .section {
+            margin-bottom: 20px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+          }
+          .section-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+          }
+        </style>
+      </head>
+      <body>
+        <h2>${title}</h2>
+        <div class="section">
+          ${content}
+        </div>
+      </body>
+    </html>
+  `);
+}
+
 // Function to get all bookmarks
 async function getAllBookmarks() {
   return new Promise((resolve) => {
@@ -29,9 +76,15 @@ async function getAllBookmarks() {
 
 // Function to clean and parse JSON response
 function cleanAndParseJSON(text) {
+  let debugOutput = '';
+  debugOutput += '=== Original Response ===\n';
+  debugOutput += text + '\n\n';
+  
   try {
     // Remove any markdown formatting
     let cleanText = text.replace(/```json\s*|\s*```/g, '').trim();
+    debugOutput += '=== After removing markdown ===\n';
+    debugOutput += cleanText + '\n\n';
     
     // Find the first { and last } to extract just the JSON object
     const startIndex = cleanText.indexOf('{');
@@ -40,13 +93,19 @@ function cleanAndParseJSON(text) {
       throw new Error('No valid JSON object found in response');
     }
     cleanText = cleanText.slice(startIndex, endIndex);
+    debugOutput += '=== After extracting JSON object ===\n';
+    debugOutput += cleanText + '\n\n';
     
     // Handle apostrophes in text by escaping them
     cleanText = cleanText.replace(/([^\\])'([^']*)'/g, '$1\\"$2\\"');
     cleanText = cleanText.replace(/^'([^']*)'/g, '"\\"$1\\""');
+    debugOutput += '=== After handling apostrophes ===\n';
+    debugOutput += cleanText + '\n\n';
     
     // Ensure all property names are double-quoted
     cleanText = cleanText.replace(/([{,]\s*)([a-zA-Z0-9_]+)(\s*:)/g, '$1"$2"$3');
+    debugOutput += '=== After ensuring double-quoted properties ===\n';
+    debugOutput += cleanText + '\n\n';
     
     // Remove any extra spaces and normalize newlines
     cleanText = cleanText
@@ -54,22 +113,32 @@ function cleanAndParseJSON(text) {
       .replace(/\s+/g, ' ')    // Replace multiple spaces with a single space
       .replace(/\s*([{}[\],:])\s*/g, '$1'); // Remove spaces around JSON syntax characters
     
+    debugOutput += '=== Final cleaned text ===\n';
+    debugOutput += cleanText + '\n\n';
+    
     // Try to parse the JSON
     try {
-      return JSON.parse(cleanText);
+      const parsed = JSON.parse(cleanText);
+      debugOutput += '=== Successfully parsed JSON ===\n';
+      debugOutput += JSON.stringify(parsed, null, 2);
+      showDebugPopup('JSON Cleaning Process', debugOutput);
+      return parsed;
     } catch (parseError) {
       // If parsing fails, try to find the exact position of the error
       const errorPosition = parseInt(parseError.message.match(/\d+/)[0]);
-      console.error('JSON Parse Error Details:');
-      console.error('Error position:', errorPosition);
-      console.error('Text before error:', cleanText.substring(Math.max(0, errorPosition - 50), errorPosition));
-      console.error('Text after error:', cleanText.substring(errorPosition, Math.min(cleanText.length, errorPosition + 50)));
-      console.error('Full cleaned text:', cleanText);
+      debugOutput += '=== JSON Parse Error Details ===\n';
+      debugOutput += 'Error position: ' + errorPosition + '\n';
+      debugOutput += 'Text before error: ' + cleanText.substring(Math.max(0, errorPosition - 50), errorPosition) + '\n';
+      debugOutput += 'Text after error: ' + cleanText.substring(errorPosition, Math.min(cleanText.length, errorPosition + 50)) + '\n';
+      debugOutput += 'Full cleaned text: ' + cleanText + '\n';
+      showDebugPopup('JSON Parsing Error', debugOutput);
       throw parseError;
     }
   } catch (error) {
-    console.error('Error cleaning JSON:', error);
-    console.error('Original text:', text);
+    debugOutput += '=== Error cleaning JSON ===\n';
+    debugOutput += 'Error: ' + error + '\n';
+    debugOutput += 'Original text: ' + text + '\n';
+    showDebugPopup('JSON Cleaning Error', debugOutput);
     throw new Error('Failed to parse JSON response: ' + error.message);
   }
 }
@@ -102,33 +171,39 @@ async function analyzeBookmarks(bookmarks) {
 
   try {
     console.log('Sending request to Gemini...');
+    const requestBody = {
+      contents: [{
+        parts: [{
+          text: prompt
+        }]
+      }],
+      generationConfig: {
+        temperature: 0.3,
+        topK: 40,
+        topP: 0.95,
+        maxOutputTokens: 2048,
+      }
+    };
+
+    showDebugPopup('API Request', JSON.stringify(requestBody, null, 2));
+
     const response = await fetch(`${LLM_API_ENDPOINT}?key=${LLM_API_KEY}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        contents: [{
-          parts: [{
-            text: prompt
-          }]
-        }],
-        generationConfig: {
-          temperature: 0.2, // Lower temperature for more consistent output
-          topK: 40,
-          topP: 0.95,
-          maxOutputTokens: 2048,
-        }
-      })
+      body: JSON.stringify(requestBody)
     });
 
     const data = await response.json();
     if (data.error) {
+      showDebugPopup('API Error', JSON.stringify(data.error, null, 2));
       throw new Error(data.error.message);
     }
     
+    showDebugPopup('API Response', JSON.stringify(data, null, 2));
+    
     const responseText = data.candidates[0].content.parts[0].text;
-    console.log('Raw response:', responseText);
     return cleanAndParseJSON(responseText);
   } catch (error) {
     console.error('Error analyzing bookmarks:', error);
