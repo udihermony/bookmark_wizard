@@ -1,51 +1,59 @@
 document.addEventListener('DOMContentLoaded', function() {
   const analyzeBtn = document.getElementById('analyzeBtn');
   const organizeBtn = document.getElementById('organizeBtn');
-  const loading = document.getElementById('loading');
-  const status = document.getElementById('status');
+  const statusDiv = document.getElementById('status');
+  const debugSection = document.getElementById('debugSection');
+  const debugTitle = document.querySelector('.debug-title');
+  const debugContent = document.getElementById('debugContent');
 
-  function showStatus(message, isError = false) {
-    status.textContent = message;
-    status.className = 'status ' + (isError ? 'error' : 'success');
-    status.style.display = 'block';
-  }
-
-  function setLoading(isLoading) {
-    loading.style.display = isLoading ? 'block' : 'none';
-    analyzeBtn.disabled = isLoading;
-    organizeBtn.disabled = isLoading;
-  }
+  // Listen for debug messages from the background script
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.action === 'showDebug') {
+      debugTitle.textContent = message.title;
+      debugContent.textContent = message.content;
+      debugSection.style.display = 'block';
+    }
+  });
 
   analyzeBtn.addEventListener('click', async () => {
     try {
-      setLoading(true);
-      const response = await chrome.runtime.sendMessage({ action: 'analyzeBookmarks' });
-      if (response.success) {
-        showStatus('Bookmarks analyzed successfully!');
-        organizeBtn.disabled = false;
-      } else {
-        showStatus('Error analyzing bookmarks: ' + response.error, true);
-      }
+      analyzeBtn.disabled = true;
+      organizeBtn.disabled = true;
+      statusDiv.className = '';
+      statusDiv.textContent = 'Analyzing bookmarks...';
+      debugSection.style.display = 'none';
+
+      await chrome.runtime.sendMessage({ action: 'analyzeBookmarks' });
+      
+      statusDiv.className = 'success';
+      statusDiv.textContent = 'Analysis complete! You can now organize your bookmarks.';
+      organizeBtn.disabled = false;
     } catch (error) {
-      showStatus('Error: ' + error.message, true);
+      statusDiv.className = 'error';
+      statusDiv.textContent = 'Error: ' + error.message;
     } finally {
-      setLoading(false);
+      analyzeBtn.disabled = false;
     }
   });
 
   organizeBtn.addEventListener('click', async () => {
     try {
-      setLoading(true);
-      const response = await chrome.runtime.sendMessage({ action: 'organizeBookmarks' });
-      if (response.success) {
-        showStatus('Bookmarks organized successfully!');
-      } else {
-        showStatus('Error organizing bookmarks: ' + response.error, true);
-      }
+      analyzeBtn.disabled = true;
+      organizeBtn.disabled = true;
+      statusDiv.className = '';
+      statusDiv.textContent = 'Organizing bookmarks...';
+      debugSection.style.display = 'none';
+
+      await chrome.runtime.sendMessage({ action: 'organizeBookmarks' });
+      
+      statusDiv.className = 'success';
+      statusDiv.textContent = 'Bookmarks organized successfully!';
     } catch (error) {
-      showStatus('Error: ' + error.message, true);
+      statusDiv.className = 'error';
+      statusDiv.textContent = 'Error: ' + error.message;
     } finally {
-      setLoading(false);
+      analyzeBtn.disabled = false;
+      organizeBtn.disabled = true;
     }
   });
 }); 

@@ -5,7 +5,8 @@
   "description": "AI-powered bookmark organizer using Gemini API",
   "permissions": [
     "bookmarks",
-    "storage"
+    "storage",
+    "tabs"
   ],
   "host_permissions": [
     "https://generativelanguage.googleapis.com/*"

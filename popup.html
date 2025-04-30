@@ -6,78 +6,69 @@
     body {
       width: 400px;
       padding: 20px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-    }
-    .container {
-      display: flex;
-      flex-direction: column;
-      gap: 15px;
+      font-family: Arial, sans-serif;
     }
     button {
-      background-color: #4CAF50;
+      width: 100%;
+      padding: 10px;
+      margin: 5px 0;
+      background-color: #4285f4;
       color: white;
-      padding: 10px 15px;
       border: none;
       border-radius: 4px;
       cursor: pointer;
-      font-size: 14px;
-      transition: background-color 0.3s;
     }
     button:hover {
-      background-color: #45a049;
+      background-color: #357abd;
     }
     button:disabled {
-      background-color: #cccccc;
+      background-color: #ccc;
       cursor: not-allowed;
     }
-    .status {
+    #status {
       margin-top: 10px;
       padding: 10px;
       border-radius: 4px;
-      display: none;
     }
     .success {
-      background-color: #dff0d8;
-      color: #3c763d;
+      background-color: #d4edda;
+      color: #155724;
     }
     .error {
-      background-color: #f2dede;
-      color: #a94442;
+      background-color: #f8d7da;
+      color: #721c24;
     }
-    .loading {
+    #debugSection {
+      margin-top: 20px;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
       display: none;
-      text-align: center;
-      margin: 10px 0;
     }
-    .spinner {
-      border: 4px solid #f3f3f3;
-      border-top: 4px solid #3498db;
-      border-radius: 50%;
-      width: 20px;
-      height: 20px;
-      animation: spin 1s linear infinite;
-      margin: 0 auto;
+    #debugContent {
+      font-family: monospace;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      max-height: 400px;
+      overflow-y: auto;
+      padding: 10px;
+      background-color: #f8f9fa;
+      border-radius: 4px;
     }
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
+    .debug-title {
+      font-weight: bold;
+      margin-bottom: 10px;
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h2>Bookmark Wizard</h2>
-    <p>Organize your bookmarks using AI</p>
-    
-    <button id="analyzeBtn">Analyze Bookmarks</button>
-    <button id="organizeBtn" disabled>Organize Bookmarks</button>
-    
-    <div id="loading" class="loading">
-      <div class="spinner"></div>
-      <p>Processing...</p>
-    </div>
-    
-    <div id="status" class="status"></div>
+  <h2>Bookmark Wizard</h2>
+  <button id="analyzeBtn">Analyze Bookmarks</button>
+  <button id="organizeBtn" disabled>Organize Bookmarks</button>
+  <div id="status"></div>
+  <div id="debugSection">
+    <div class="debug-title"></div>
+    <div id="debugContent"></div>
   </div>
   <script src="popup.js"></script>
 </body>
