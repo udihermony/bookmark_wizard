@@ -1,304 +1,457 @@
-// Configuration for the LLM API
-const OLLAMA_API_ENDPOINT = 'http://localhost:11434/api/generate';
+// Configuration for LM Studio
+import { LMStudioClient } from './lmstudio-wrapper.js';
 
-// Function to send debug info to popup
-async function sendDebugInfo(title, content) {
-  const tabs = await chrome.tabs.query({active: true, currentWindow: true});
-  if (tabs.length > 0) {
-    chrome.runtime.sendMessage({
-      action: 'showDebug',
-      title: title,
-      content: content
-    });
+// Create a client instance
+const client = new LMStudioClient({
+  baseUrl: 'http://localhost:1234',
+  headers: {
+    'Content-Type': 'application/json'
   }
-}
+});
 
-// Function to make API request with timeout
-async function fetchWithTimeout(url, options, timeout = 30000) {
-  const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), timeout);
-  
-  try {
-    const response = await fetch(url, {
-      ...options,
-      signal: controller.signal
-    });
-    clearTimeout(id);
-    return response;
-  } catch (error) {
-    clearTimeout(id);
-    if (error.name === 'AbortError') {
-      throw new Error('Request timed out after ' + timeout + 'ms');
-    }
-    throw error;
-  }
-}
+// Open sidebar when extension icon is clicked
+chrome.action.onClicked.addListener((tab) => {
+  chrome.sidePanel.open({ windowId: tab.windowId });
+});
 
 // Function to get all bookmarks
 async function getAllBookmarks() {
   return new Promise((resolve) => {
     chrome.bookmarks.getTree((bookmarkTreeNodes) => {
       const bookmarks = [];
-      function traverseBookmarks(nodes) {
+      
+      function extractBookmarks(nodes) {
         for (const node of nodes) {
           if (node.url) {
             bookmarks.push({
               id: node.id,
               title: node.title,
-              url: node.url
+              url: node.url,
+              description: node.description || '',
+              url: node.url,
+              children: node.data
             });
           }
           if (node.children) {
-            traverseBookmarks(node.children);
+            extractBookmarks(node.children);
           }
         }
       }
-      traverseBookmarks(bookmarkTreeNodes);
+      
+      extractBookmarks(bookmarkTreeNodes);
       resolve(bookmarks);
     });
   });
 }
 
-// Function to process bookmarks in batches
-async function processBookmarksInBatches(bookmarks, batchSize = 10) {
-  const batches = [];
-  for (let i = 0; i < bookmarks.length; i += batchSize) {
-    batches.push(bookmarks.slice(i, i + batchSize));
-  }
-  return batches;
-}
-
-// Function to clean and parse JSON response
-function cleanAndParseJSON(text) {
-  let debugOutput = '';
-  debugOutput += '=== Original Response ===\n';
-  debugOutput += text + '\n\n';
-  
+// Function to save bookmarks to storage
+async function saveBookmarks(bookmarks) {
   try {
-    // Remove any markdown formatting
-    let cleanText = text.replace(/```json\s*|\s*```/g, '').trim();
-    debugOutput += '=== After removing markdown ===\n';
-    debugOutput += cleanText + '\n\n';
-    
-    // Find the first { and last } to extract just the JSON object
-    const startIndex = cleanText.indexOf('{');
-    const endIndex = cleanText.lastIndexOf('}') + 1;
-    if (startIndex === -1 || endIndex === 0) {
-      throw new Error('No valid JSON object found in response');
-    }
-    cleanText = cleanText.slice(startIndex, endIndex);
-    debugOutput += '=== After extracting JSON object ===\n';
-    debugOutput += cleanText + '\n\n';
-    
-    // Handle apostrophes in text by escaping them
-    cleanText = cleanText.replace(/([^\\])'([^']*)'/g, '$1\\"$2\\"');
-    cleanText = cleanText.replace(/^'([^']*)'/g, '"\\"$1\\""');
-    debugOutput += '=== After handling apostrophes ===\n';
-    debugOutput += cleanText + '\n\n';
-    
-    // Ensure all property names are double-quoted
-    cleanText = cleanText.replace(/([{,]\s*)([a-zA-Z0-9_]+)(\s*:)/g, '$1"$2"$3');
-    debugOutput += '=== After ensuring double-quoted properties ===\n';
-    debugOutput += cleanText + '\n\n';
-    
-    // Remove any extra spaces and normalize newlines
-    cleanText = cleanText
-      .replace(/\n\s*/g, ' ')  // Replace newlines and their surrounding whitespace with a single space
-      .replace(/\s+/g, ' ')    // Replace multiple spaces with a single space
-      .replace(/\s*([{}[\],:])\s*/g, '$1'); // Remove spaces around JSON syntax characters
-    
-    // Fix incomplete JSON by adding missing closing brackets/braces
-    const openBraces = (cleanText.match(/{/g) || []).length;
-    const closeBraces = (cleanText.match(/}/g) || []).length;
-    const openBrackets = (cleanText.match(/\[/g) || []).length;
-    const closeBrackets = (cleanText.match(/\]/g) || []).length;
-    
-    // Add missing closing brackets/braces
-    cleanText += '}'.repeat(openBraces - closeBraces);
-    cleanText += ']'.repeat(openBrackets - closeBrackets);
-    
-    debugOutput += '=== Final cleaned text ===\n';
-    debugOutput += cleanText + '\n\n';
-    
-    // Try to parse the JSON
-    try {
-      const parsed = JSON.parse(cleanText);
-      debugOutput += '=== Successfully parsed JSON ===\n';
-      debugOutput += JSON.stringify(parsed, null, 2);
-      sendDebugInfo('JSON Cleaning Process', debugOutput);
-      return parsed;
-    } catch (parseError) {
-      // If parsing fails, try to find the exact position of the error
-      const errorPosition = parseInt(parseError.message.match(/\d+/)[0]);
-      debugOutput += '=== JSON Parse Error Details ===\n';
-      debugOutput += 'Error position: ' + errorPosition + '\n';
-      debugOutput += 'Text before error: ' + cleanText.substring(Math.max(0, errorPosition - 50), errorPosition) + '\n';
-      debugOutput += 'Text after error: ' + cleanText.substring(errorPosition, Math.min(cleanText.length, errorPosition + 50)) + '\n';
-      debugOutput += 'Full cleaned text: ' + cleanText + '\n';
-      sendDebugInfo('JSON Parsing Error', debugOutput);
-      throw parseError;
-    }
+    await chrome.storage.local.set({ bookmarks });
+    return true;
   } catch (error) {
-    debugOutput += '=== Error cleaning JSON ===\n';
-    debugOutput += 'Error: ' + error + '\n';
-    debugOutput += 'Original text: ' + text + '\n';
-    sendDebugInfo('JSON Cleaning Error', debugOutput);
-    throw new Error('Failed to parse JSON response: ' + error.message);
+    console.error('Error saving bookmarks:', error);
+    throw error;
   }
 }
 
-// Function to analyze bookmarks using Ollama
-async function analyzeBookmarks(bookmarks) {
-  // Create a simplified version with just titles and IDs
-  const simplifiedBookmarks = bookmarks.map(b => ({
-    id: b.id,
-    title: b.title
-  }));
-
-  const prompt = `You are a JSON-only response bot. You must respond with valid JSON only, no markdown, no backticks, no additional text. All property names must be double-quoted.
-
-    Analyze these bookmark titles and suggest categories for them.
-    For each bookmark, provide a category and a brief explanation based on its title.
-    IMPORTANT: You must respond with a valid JSON object only. No markdown, no backticks, no additional text.
-    The response must be a single JSON object with this exact structure:
-    {
-      "categories": [
-        {
-          "name": "category_name",
-          "bookmarks": [
-            {
-              "id": "bookmark_id",
-              "category": "category_name",
-              "explanation": "brief explanation"
-            }
-          ]
-        }
-      ]
-    }
-    
-    Bookmarks to analyze:
-    ${JSON.stringify(simplifiedBookmarks, null, 2)}`;
-
+// Function to get all saved bookmarks
+async function getSavedBookmarks() {
   try {
-    console.log('Sending request to Ollama...');
-    const requestBody = {
-      model: "qwen3:32b",
-      prompt: prompt,
-      stream: false,
-      options: {
-        temperature: 0.3,
-        top_k: 40,
-        top_p: 0.95,
-        num_predict: 2048
-      }
+    const result = await chrome.storage.local.get('bookmarks');
+    return result.bookmarks || [];
+  } catch (error) {
+    console.error('Error retrieving bookmarks:', error);
+    throw error;
+  }
+}
+
+// Function to get a specific bookmark by ID
+async function getBookmarkById(id) {
+  try {
+    const bookmarks = await getSavedBookmarks();
+    return bookmarks.find(bookmark => bookmark.id === id) || null;
+  } catch (error) {
+    console.error('Error retrieving bookmark:', error);
+    throw error;
+  }
+}
+
+// Function to analyze a bookmark
+async function analyzeBookmark(bookmark) {
+  try {
+    // For now, just return the bookmark as is
+    const analysis = {
+      bookmarkId: bookmark.id,
+      title: bookmark.title,
+      url: bookmark.url,
+      description: bookmark.description || '',
+      timestamp: new Date().toISOString()
     };
+    
+    // Save the analysis to chrome.storage
+    const bookmarks = await getSavedBookmarks();
+    const updatedBookmarks = bookmarks.map(b => 
+      b.id === bookmark.id ? { ...b, ...analysis } : b
+    );
+    await saveBookmarks(updatedBookmarks);
+    
+    return analysis;
+  } catch (error) {
+    console.error('Error analyzing bookmark:', error);
+    throw error;
+  }
+}
 
-    sendDebugInfo('API Request', JSON.stringify(requestBody, null, 2));
+// Function to inspect storage
+async function inspectStorage() {
+  try {
+    const allData = await chrome.storage.local.get(null);
+    console.log('All data in chrome.storage.local:', allData);
+    return allData;
+  } catch (error) {
+    console.error('Error inspecting storage:', error);
+    throw error;
+  }
+}
 
-    const response = await fetchWithTimeout(OLLAMA_API_ENDPOINT, {
+// Function to analyze bookmarks with LLM
+async function analyzeBookmarksWithLLM(titles) {
+  try {
+    const messages = [
+      {
+        role: "system",
+        content: "You are a helpful assistant that categorizes bookmarks. Given a list of bookmark titles, suggest categories for them."
+      },
+      {
+        role: "user",
+        content: `Please analyze these bookmark titles and suggest categories for them:
+          ${titles.join('\n')}`
+      }
+    ];
+
+    const llm = await client.llm.model();
+    const response = await llm.respond(messages, {
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "bookmark_analysis",
+          strict: "true",
+          schema: {
+            type: "object",
+            properties: {
+              categories: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    title: { type: "string" },
+                    category: { type: "string" },
+                    explanation: { type: "string" }
+                  },
+                  required: ["title", "category", "explanation"]
+                }
+              }
+            },
+            required: ["categories"]
+          }
+        }
+      },
+      temperature: 0.7,
+      max_tokens: 500,
+      stream: false
+    });
+    
+    return response;
+  } catch (error) {
+    console.error('Error analyzing bookmarks:', error);
+    throw error;
+  }
+}
+
+// Function to categorize a single bookmark
+async function categorizeBookmark(bookmark, categories) {
+  try {
+    const prompt = `Given the following bookmark:
+Title: ${bookmark.title}
+URL: ${bookmark.url}
+
+Current categories: ${categories.join(', ')}
+
+IMPORTANT: if this bookmark fits in one of the current categories Create a new one.
+
+For example:
+- For a cost tracking page: "Cost Management" or "Usage Tracking"
+- For a documentation page: "Documentation" or "Technical Reference"
+- For a learning resource: "Learning Resources" or "Educational Content"
+
+Return a JSON object with the following format:
+{
+  "category": "new or existing category name",
+  "explanation": "brief explanation of why this category was chosen"
+}`;
+
+    const response = await fetch('http://localhost:1234/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Accept': 'application/json'
       },
-      body: JSON.stringify(requestBody)
-    }, 30000); // 30 second timeout
+      body: JSON.stringify({
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a helpful assistant that categorizes bookmarks. You MUST create new, specific categories. NEVER use "Other" or generic categories. Be descriptive and precise with category names.'
+          },
+          {
+            role: 'user',
+            content: prompt
+          }
+        ],
+        temperature: 0.7,
+        max_tokens: 100
+      })
+    });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      sendDebugInfo('API Error Response', `Status: ${response.status}, Body: ${errorText}`);
-      throw new Error(`API request failed with status ${response.status}: ${errorText}`);
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
 
     const data = await response.json();
-    if (data.error) {
-      sendDebugInfo('API Error', JSON.stringify(data.error, null, 2));
-      throw new Error(data.error);
+    const responseText = data.choices[0].message.content.trim();
+    console.log('Raw LLM response:', responseText);
+    
+    try {
+      // Clean the response text by removing any trailing newlines and whitespace
+      const cleanResponse = responseText.replace(/\n/g, '').trim();
+      const parsedResponse = JSON.parse(cleanResponse);
+      console.log('Parsed response:', parsedResponse);
+      
+      if (!parsedResponse.category) {
+        throw new Error('Response missing category field');
+      }
+      
+      // If the LLM still returns "Other", force it to create a new category
+      if (parsedResponse.category.toLowerCase() === 'other') {
+        const newCategory = `Resource Management`; // Default category for cost/usage tracking
+        console.log('Forcing new category instead of "Other":', newCategory);
+        return { success: true, category: newCategory };
+      }
+      
+      return { success: true, category: parsedResponse.category };
+    } catch (parseError) {
+      console.error('Error parsing LLM response:', parseError);
+      // If parsing fails, try to extract just the category name
+      const categoryMatch = responseText.match(/"category"\s*:\s*"([^"]+)"/);
+      if (categoryMatch) {
+        const category = categoryMatch[1];
+        // If the extracted category is "Other", force a new category
+        if (category.toLowerCase() === 'other') {
+          return { success: true, category: 'Resource Management' };
+        }
+        return { success: true, category };
+      }
+      throw new Error('Invalid response format from LLM');
     }
-    
-    sendDebugInfo('API Response', JSON.stringify(data, null, 2));
-    
-    const responseText = data.response;
-    return cleanAndParseJSON(responseText);
   } catch (error) {
-    console.error('Error analyzing bookmarks:', error);
-    sendDebugInfo('Error Details', error.toString());
-    throw error;
+    console.error('Error categorizing bookmark:', error);
+    return { success: false, error: error.message };
   }
 }
 
-// Function to organize bookmarks based on analysis
-async function organizeBookmarks(analysis) {
+// Function to consolidate categories
+async function consolidateCategories(categories) {
   try {
-    for (const category of analysis.categories) {
-      // Create category folder if it doesn't exist
-      const folder = await chrome.bookmarks.create({
-        title: category.name,
-        parentId: '1' // Root bookmark folder
-      });
+    const prompt = `Given the following list of categories:
+${categories.join('\n')}
 
-      // Move bookmarks to their respective folders
-      for (const bookmark of category.bookmarks) {
-        try {
-          await chrome.bookmarks.move(bookmark.id, {
-            parentId: folder.id
-          });
-        } catch (moveError) {
-          console.error(`Error moving bookmark ${bookmark.id}:`, moveError);
-          // Continue with next bookmark even if one fails
-        }
-      }
+Please consolidate these categories into exactly 5 categories. 
+- Combine similar categories into broader, more general categories
+- Choose the 5 most important and widely applicable categories
+- Ensure the consolidated categories are clear and meaningful
+- Make sure each category can accommodate multiple types of content
+
+Return a JSON object with the following format:
+{
+  "categories": ["category1", "category2", "category3", "category4", "category5"]
+}`;
+
+    const response = await fetch('http://localhost:1234/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a helpful assistant that consolidates bookmark categories. You must return exactly 5 categories. Return a JSON object with a "categories" array containing exactly 5 category names.'
+          },
+          {
+            role: 'user',
+            content: prompt
+          }
+        ],
+        temperature: 0.7,
+        max_tokens: 200
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
-    return true;
+
+    const data = await response.json();
+    const responseText = data.choices[0].message.content.trim();
+    console.log('Raw consolidation response:', responseText);
+    
+    try {
+      // Clean the response text by removing any trailing newlines and whitespace
+      const cleanResponse = responseText.replace(/\n/g, '').trim();
+      const parsedResponse = JSON.parse(cleanResponse);
+      console.log('Parsed consolidation response:', parsedResponse);
+      
+      if (!parsedResponse.categories || !Array.isArray(parsedResponse.categories)) {
+        throw new Error('Response missing categories array');
+      }
+      
+      if (parsedResponse.categories.length !== 5) {
+        throw new Error(`Expected exactly 5 categories, got ${parsedResponse.categories.length}`);
+      }
+      
+      return { success: true, categories: parsedResponse.categories };
+    } catch (parseError) {
+      console.error('Error parsing consolidation response:', parseError);
+      throw new Error('Invalid response format from LLM');
+    }
   } catch (error) {
-    console.error('Error organizing bookmarks:', error);
-    throw error;
+    console.error('Error consolidating categories:', error);
+    return { success: false, error: error.message };
   }
 }
 
 // Message handler
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === 'analyzeBookmarks') {
+  console.log('Received message:', request);
+
+  if (!request || !request.action) {
+    console.error('Invalid message received:', request);
+    sendResponse({ success: false, error: 'Invalid message format' });
+    return true;
+  }
+
+  if (request.action === 'analyzeBookmark') {
     getAllBookmarks()
-      .then(async (bookmarks) => {
-        const batches = await processBookmarksInBatches(bookmarks);
-        const allAnalysis = { categories: [] };
-        
-        for (let i = 0; i < batches.length; i++) {
-          const batchAnalysis = await analyzeBookmarks(batches[i]);
-          // Merge categories
-          for (const category of batchAnalysis.categories) {
-            const existingCategory = allAnalysis.categories.find(c => c.name === category.name);
-            if (existingCategory) {
-              existingCategory.bookmarks.push(...category.bookmarks);
-            } else {
-              allAnalysis.categories.push(category);
-            }
-          }
+      .then(bookmarks => {
+        if (!bookmarks || bookmarks.length === 0) {
+          throw new Error('No bookmarks found');
         }
-        
-        chrome.storage.local.set({ bookmarkAnalysis: allAnalysis }, () => {
-          sendResponse({ success: true, totalBatches: batches.length });
-        });
+        // For now, analyze the first bookmark
+        return analyzeBookmark(bookmarks[0]);
+      })
+      .then(analysis => {
+        console.log('Bookmark analyzed:', analysis);
+        sendResponse({ success: true, analysis });
       })
       .catch(error => {
+        console.error('Error in analyzeBookmark:', error);
+        sendResponse({ success: false, error: error.message });
+      });
+    return true;
+  }
+
+  if (request.action === 'getAllBookmarks') {
+    getAllBookmarks()
+      .then(bookmarks => saveBookmarks(bookmarks))
+      .then(() => {
+        console.log('Successfully saved all bookmarks');
+        sendResponse({ success: true });
+      })
+      .catch(error => {
+        console.error('Error in getAllBookmarks:', error);
         sendResponse({ success: false, error: error.message });
       });
     return true; // Required for async response
   }
-
-  if (request.action === 'organizeBookmarks') {
-    chrome.storage.local.get(['bookmarkAnalysis'], async (result) => {
-      try {
-        if (!result.bookmarkAnalysis) {
-          throw new Error('No bookmark analysis found');
-        }
-        await organizeBookmarks(result.bookmarkAnalysis);
-        sendResponse({ success: true });
-      } catch (error) {
+  
+  if (request.action === 'getSavedBookmarks') {
+    getSavedBookmarks()
+      .then(bookmarks => {
+        console.log('Retrieved bookmarks:', bookmarks);
+        sendResponse({ success: true, bookmarks });
+      })
+      .catch(error => {
+        console.error('Error in getSavedBookmarks:', error);
         sendResponse({ success: false, error: error.message });
-      }
-    });
-    return true; // Required for async response
+      });
+    return true;
   }
+  
+  if (request.action === 'getBookmarkById') {
+    if (!request.id) {
+      console.error('No ID provided for getBookmarkById');
+      sendResponse({ success: false, error: 'No bookmark ID provided' });
+      return true;
+    }
+
+    getBookmarkById(request.id)
+      .then(bookmark => {
+        console.log('Retrieved bookmark:', bookmark);
+        sendResponse({ success: true, bookmark });
+      })
+      .catch(error => {
+        console.error('Error in getBookmarkById:', error);
+        sendResponse({ success: false, error: error.message });
+      });
+    return true;
+  }
+
+  if (request.action === 'inspectStorage') {
+    inspectStorage()
+      .then(data => {
+        console.log('Storage contents:', data);
+        sendResponse({ success: true, data });
+      })
+      .catch(error => {
+        console.error('Error inspecting storage:', error);
+        sendResponse({ success: false, error: error.message });
+      });
+    return true;
+  }
+
+  if (request.action === 'analyzeBookmarks') {
+    if (!request.titles || !Array.isArray(request.titles)) {
+      sendResponse({ success: false, error: 'No titles provided' });
+      return true;
+    }
+
+    analyzeBookmarksWithLLM(request.titles)
+      .then(analysis => {
+        console.log('Bookmarks analyzed:', analysis);
+        sendResponse({ success: true, analysis });
+      })
+      .catch(error => {
+        console.error('Error in analyzeBookmarks:', error);
+        sendResponse({ success: false, error: error.message });
+      });
+    return true;
+  }
+
+  if (request.action === 'categorizeBookmark') {
+    categorizeBookmark(request.bookmark, request.categories)
+      .then(response => sendResponse(response))
+      .catch(error => sendResponse({ success: false, error: error.message }));
+    return true;
+  }
+
+  if (request.action === 'consolidateCategories') {
+    consolidateCategories(request.categories)
+      .then(response => sendResponse(response))
+      .catch(error => sendResponse({ success: false, error: error.message }));
+    return true;
+  }
+
+  // Handle unknown actions
+  console.error('Unknown action:', request.action);
+  sendResponse({ success: false, error: 'Unknown action' });
+  return true;
 });

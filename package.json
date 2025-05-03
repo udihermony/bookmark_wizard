@@ -1,0 +1,10 @@
+{
+  "name": "bookmark-wizard",
+  "version": "1.0.0",
+  "description": "AI-powered bookmark organizer using LM Studio",
+  "main": "background.js",
+  "type": "module",
+  "dependencies": {
+    "@lmstudio/sdk": "^0.1.0"
+  }
+}

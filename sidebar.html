@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Bookmark Wizard</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 16px;
+      font-family: Arial, sans-serif;
+      height: 100vh;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #eee;
+    }
+    .header h2 {
+      margin: 0;
+      font-size: 18px;
+    }
+    .button-group {
+      display: flex;
+      gap: 8px;
+    }
+    .btn {
+      padding: 6px 12px;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .refresh-btn {
+      background: #3498db;
+    }
+    .refresh-btn:hover {
+      background: #2980b9;
+    }
+    .fetch-btn {
+      background: #2ecc71;
+    }
+    .fetch-btn:hover {
+      background: #27ae60;
+    }
+    .analyze-btn {
+      background: #9b59b6;
+    }
+    .analyze-btn:hover {
+      background: #8e44ad;
+    }
+    .analyze-btn:disabled {
+      background: #bdc3c7;
+      cursor: not-allowed;
+    }
+    .library-btn {
+      background: #e67e22;
+    }
+    .library-btn:hover {
+      background: #d35400;
+    }
+    .debug-btn {
+      background: #34495e;
+    }
+    .debug-btn:hover {
+      background: #2c3e50;
+    }
+    .debug-container {
+      padding: 20px;
+      background: #f8f9fa;
+      border-radius: 8px;
+      font-family: monospace;
+    }
+    .debug-container pre {
+      background: #fff;
+      padding: 10px;
+      border-radius: 4px;
+      overflow-x: auto;
+      font-size: 12px;
+      border: 1px solid #ddd;
+    }
+    .debug-container h3 {
+      margin-top: 0;
+      color: #2c3e50;
+    }
+    .debug-container h4 {
+      margin: 20px 0 10px;
+      color: #34495e;
+    }
+    .debug-container h5 {
+      margin: 15px 0 5px;
+      color: #7f8c8d;
+    }
+    .bookmark-list {
+      flex: 1;
+      overflow-y: auto;
+      padding-right: 8px;
+    }
+    .bookmark-item {
+      border: 1px solid #ddd;
+      margin: 8px 0;
+      padding: 12px;
+      border-radius: 4px;
+      background: #f9f9f9;
+    }
+    .bookmark-id {
+      font-size: 12px;
+      color: #666;
+      margin-bottom: 4px;
+    }
+    .bookmark-title {
+      font-size: 14px;
+      font-weight: bold;
+      margin-bottom: 4px;
+      color: #2c3e50;
+    }
+    .bookmark-url {
+      color: #3498db;
+      text-decoration: none;
+      word-break: break-all;
+      font-size: 13px;
+    }
+    .bookmark-url:hover {
+      text-decoration: underline;
+    }
+    .no-bookmarks {
+      text-align: center;
+      color: #666;
+      padding: 20px;
+    }
+    .status {
+      margin: 8px 0;
+      padding: 8px;
+      border-radius: 4px;
+      display: none;
+      font-size: 13px;
+    }
+    .status.success {
+      background: #d4edda;
+      color: #155724;
+      display: block;
+    }
+    .status.error {
+      background: #f8d7da;
+      color: #721c24;
+      display: block;
+    }
+    /* Custom scrollbar */
+    .bookmark-list::-webkit-scrollbar {
+      width: 8px;
+    }
+    .bookmark-list::-webkit-scrollbar-track {
+      background: #f1f1f1;
+      border-radius: 4px;
+    }
+    .bookmark-list::-webkit-scrollbar-thumb {
+      background: #888;
+      border-radius: 4px;
+    }
+    .bookmark-list::-webkit-scrollbar-thumb:hover {
+      background: #555;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h2>Bookmark Wizard</h2>
+    <div class="button-group">
+      <button class="btn fetch-btn" id="fetchBtn">Fetch</button>
+      <button class="btn refresh-btn" id="refreshBtn">Refresh</button>
+      <button class="btn analyze-btn" id="analyzeBtn">Analyze</button>
+      <button class="btn library-btn" id="showLibraryBtn">Show Library</button>
+      <button class="btn debug-btn" id="debugBtn">Debug</button>
+    </div>
+  </div>
+  <div id="status" class="status"></div>
+  <div id="bookmarkList" class="bookmark-list">
+    <div class="no-bookmarks">No bookmarks found</div>
+  </div>
+  <script src="sidebar.js"></script>
+</body>
+</html> 

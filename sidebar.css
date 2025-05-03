@@ -1,0 +1,263 @@
+/* Sidebar layout */
+.sidebar-layout {
+  display: flex;
+  gap: 20px;
+  padding: 10px;
+  height: 100%;
+}
+
+/* Categories column */
+.categories-column {
+  flex: 0 0 200px;
+  border-right: 1px solid #ccc;
+  padding-right: 10px;
+}
+
+.categories-column h3 {
+  margin: 0 0 10px 0;
+  padding: 5px;
+  background: #f0f0f0;
+  border-radius: 4px;
+}
+
+/* Category folders */
+.category-folder {
+  display: flex;
+  flex-direction: column;
+  margin: 4px 0;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.category-folder:hover {
+  background-color: #f0f0f0;
+}
+
+.category-folder-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+}
+
+.folder-icon {
+  font-size: 1.2em;
+  color: #666;
+  width: 20px;
+  text-align: center;
+}
+
+.category-name {
+  font-size: 0.9em;
+  color: #333;
+}
+
+/* Folder bookmarks */
+.folder-bookmarks {
+  padding-left: 28px;
+  margin-top: 4px;
+}
+
+.folder-bookmark {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  margin: 2px 0;
+  border-radius: 4px;
+  font-size: 0.85em;
+  color: #333;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.folder-bookmark:hover {
+  background-color: #f0f0f0;
+}
+
+.bookmark-favicon {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
+
+.bookmark-title {
+  flex: 1;
+  margin-right: 10px;
+  color: #333;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bookmark-title:hover {
+  color: #1a73e8;
+  text-decoration: underline;
+}
+
+/* Expanded state */
+.category-folder.expanded > .category-folder-header {
+  background-color: #f0f0f0;
+}
+
+/* Bookmarks column */
+.bookmarks-column {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.bookmarks-column h3 {
+  margin: 0 0 10px 0;
+  padding: 5px;
+  background: #f0f0f0;
+  border-radius: 4px;
+}
+
+/* Analysis results */
+.analysis-results {
+  margin-top: 10px;
+}
+
+.raw-response {
+  margin-bottom: 20px;
+}
+
+.raw-response pre {
+  background: #f5f5f5;
+  padding: 10px;
+  border-radius: 4px;
+  overflow-x: auto;
+  font-size: 0.9em;
+}
+
+.title-list {
+  margin-top: 20px;
+}
+
+.title-list ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.title-list li {
+  padding: 5px 0;
+  border-bottom: 1px solid #eee;
+}
+
+/* Library View Styles */
+.library-container {
+  padding: 20px;
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.library-header {
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.library-header h2 {
+  margin: 0;
+  color: #333;
+  font-size: 1.5em;
+}
+
+.last-updated {
+  color: #666;
+  font-size: 0.9em;
+  margin-top: 5px;
+}
+
+.library-categories {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.library-category {
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.library-category-header {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  background: #f5f5f5;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.library-category-header:hover {
+  background: #e8e8e8;
+}
+
+.library-category-header.expanded {
+  background: #e0e0e0;
+}
+
+.library-category-header .folder-icon {
+  margin-right: 10px;
+  font-size: 1.2em;
+}
+
+.library-category-header .category-name {
+  font-weight: 500;
+  color: #333;
+}
+
+.library-bookmarks {
+  padding: 10px;
+  background: #ffffff;
+}
+
+.library-bookmark {
+  display: flex;
+  align-items: center;
+  padding: 8px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.library-bookmark:hover {
+  background: #f5f5f5;
+}
+
+.library-bookmark .bookmark-favicon {
+  width: 16px;
+  height: 16px;
+  margin-right: 8px;
+}
+
+.library-bookmark .bookmark-title {
+  flex: 1;
+  margin-right: 10px;
+  color: #333;
+}
+
+.library-bookmark .bookmark-url {
+  color: #666;
+  font-size: 0.9em;
+  text-decoration: none;
+}
+
+.library-bookmark .bookmark-url:hover {
+  color: #1a73e8;
+  text-decoration: underline;
+}
+
+.no-library {
+  text-align: center;
+  padding: 20px;
+  color: #666;
+  font-style: italic;
+}
+
+/* Existing styles */
+// ... existing code ... 

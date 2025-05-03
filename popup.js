@@ -1,67 +1,101 @@
-document.addEventListener('DOMContentLoaded', function() {
-  const analyzeBtn = document.getElementById('analyzeBtn');
-  const organizeBtn = document.getElementById('organizeBtn');
+// Function to format date
+function formatDate(dateString) {
+  const date = new Date(dateString);
+  return date.toLocaleString();
+}
+
+// Function to create bookmark element
+function createBookmarkElement(bookmark) {
+  const div = document.createElement('div');
+  div.className = 'bookmark-item';
+  
+  const id = document.createElement('div');
+  id.className = 'bookmark-id';
+  id.textContent = `ID: ${bookmark.id}`;
+  
+  const title = document.createElement('div');
+  title.className = 'bookmark-title';
+  title.textContent = bookmark.title;
+  
+  const url = document.createElement('a');
+  url.className = 'bookmark-url';
+  url.href = bookmark.url;
+  url.textContent = bookmark.url;
+  url.target = '_blank';
+  
+  div.appendChild(id);
+  div.appendChild(title);
+  div.appendChild(url);
+  
+  return div;
+}
+
+// Function to display bookmarks
+function displayBookmarks(bookmarks) {
+  const bookmarkList = document.getElementById('bookmarkList');
+  bookmarkList.innerHTML = '';
+  
+  if (!bookmarks || bookmarks.length === 0) {
+    bookmarkList.innerHTML = '<div class="no-bookmarks">No bookmarks found</div>';
+    return;
+  }
+  
+  bookmarks.forEach(bookmark => {
+    bookmarkList.appendChild(createBookmarkElement(bookmark));
+  });
+}
+
+// Function to show status message
+function showStatus(message, isError = false) {
   const statusDiv = document.getElementById('status');
-  const debugSection = document.getElementById('debugSection');
-  const debugTitle = document.querySelector('.debug-title');
-  const debugContent = document.getElementById('debugContent');
+  statusDiv.textContent = message;
+  statusDiv.className = `status ${isError ? 'error' : 'success'}`;
+  setTimeout(() => {
+    statusDiv.className = 'status';
+  }, 3000);
+}
 
-  // Listen for debug messages from the background script
-  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message.action === 'showDebug') {
-      debugTitle.textContent = message.title;
-      debugContent.textContent = message.content;
-      debugSection.style.display = 'block';
+// Function to load bookmarks
+function loadBookmarks() {
+  chrome.runtime.sendMessage({ action: 'getSavedBookmarks' }, response => {
+    if (response.success) {
+      displayBookmarks(response.bookmarks);
+    } else {
+      document.getElementById('bookmarkList').innerHTML = 
+        '<div class="no-bookmarks">Error loading bookmarks: ' + response.error + '</div>';
     }
   });
+}
 
-  analyzeBtn.addEventListener('click', async () => {
-    try {
-      analyzeBtn.disabled = true;
-      organizeBtn.disabled = true;
-      statusDiv.className = '';
-      statusDiv.textContent = 'Analyzing bookmarks...';
-      debugSection.style.display = 'none';
-
-      const response = await chrome.runtime.sendMessage({ action: 'analyzeBookmarks' });
-      
-      if (response.success) {
-        statusDiv.className = 'success';
-        statusDiv.textContent = `Analysis complete! Processed ${response.totalBatches} batches. You can now organize your bookmarks.`;
-        organizeBtn.disabled = false;
-      } else {
-        throw new Error(response.error || 'Unknown error occurred');
-      }
-    } catch (error) {
-      statusDiv.className = 'error';
-      statusDiv.textContent = 'Error: ' + error.message;
-    } finally {
-      analyzeBtn.disabled = false;
+// Function to fetch bookmarks
+function fetchBookmarks() {
+  const fetchBtn = document.getElementById('fetchBtn');
+  fetchBtn.disabled = true;
+  showStatus('Fetching bookmarks...');
+  
+  chrome.runtime.sendMessage({ action: 'getAllBookmarks' }, response => {
+    fetchBtn.disabled = false;
+    if (response.success) {
+      showStatus('Bookmarks fetched successfully!');
+      loadBookmarks(); // Refresh the display
+    } else {
+      showStatus('Error fetching bookmarks: ' + response.error, true);
     }
   });
+}
 
-  organizeBtn.addEventListener('click', async () => {
-    try {
-      analyzeBtn.disabled = true;
-      organizeBtn.disabled = true;
-      statusDiv.className = '';
-      statusDiv.textContent = 'Organizing bookmarks...';
-      debugSection.style.display = 'none';
-
-      const response = await chrome.runtime.sendMessage({ action: 'organizeBookmarks' });
-      
-      if (response.success) {
-        statusDiv.className = 'success';
-        statusDiv.textContent = 'Bookmarks organized successfully!';
-      } else {
-        throw new Error(response.error || 'Unknown error occurred');
-      }
-    } catch (error) {
-      statusDiv.className = 'error';
-      statusDiv.textContent = 'Error: ' + error.message;
-    } finally {
-      analyzeBtn.disabled = false;
-      organizeBtn.disabled = true;
-    }
+// Add event listeners
+document.addEventListener('DOMContentLoaded', () => {
+  // Load bookmarks when popup opens
+  loadBookmarks();
+  
+  // Add refresh button handler
+  document.getElementById('refreshBtn').addEventListener('click', () => {
+    loadBookmarks();
   });
-}); 
+  
+  // Add fetch button handler
+  document.getElementById('fetchBtn').addEventListener('click', () => {
+    fetchBookmarks();
+  });
+});
